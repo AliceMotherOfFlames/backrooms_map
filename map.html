@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
         * {
             margin: 0;
@@ -328,6 +330,20 @@
     <div id="map"></div>
 
     <script>
+    // =====
+    // Supabase initialisation
+    // =====
+    const SUPABASE_URL = 'https://yvzurhemtulapzpvxdef.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_oENYVkLaNh49XdA0SObgDA_QfKQd0qM';
+
+    const supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+    );
+
+    
+    
+    
     // ============================================================
     // 1. EPFL PROJECTION
     // ============================================================
@@ -680,6 +696,7 @@
     console.log('✨ EPFL map created!');
 
 
+
     // ============================================================
     // 11. LEGEND
     // ============================================================
@@ -853,10 +870,8 @@
     // 14. STATE
     // ============================================================
 
-    let elements =
-        JSON.parse(
-            localStorage.getItem('epflElements')
-        ) || [];
+    let elements = [];
+
 
     let placementMode = false;
 
@@ -1055,26 +1070,93 @@
     // 18. LOAD SAVED ELEMENTS
     // ============================================================
 
-    function loadElements() {
+    async function loadElements() {
 
+        console.log('☁️ Loading elements from Supabase...');
+
+        const { data, error } =
+            await supabaseClient
+                .from('elements')
+                .select('*')
+                .order('id');
+
+        if (error) {
+
+            console.error(
+                'Could not load elements from Supabase:',
+                error
+            );
+
+            // Fallback to localStorage
+            elements =
+                JSON.parse(
+                    localStorage.getItem('epflElements')
+                ) || [];
+
+            console.log(
+                '📦 Loaded local backup instead.'
+            );
+
+        } else {
+
+            elements = data.map(row => ({
+
+                id: row.id,
+
+                parentId:
+                    row.parent_id,
+
+                name:
+                    row.name,
+
+                type:
+                    row.type,
+
+                status:
+                    row.status,
+
+                description:
+                    row.description || '',
+
+                lat:
+                    row.lat,
+
+                lng:
+                    row.lng,
+
+                floor:
+                    row.floor,
+
+                created:
+                    row.created
+
+            }));
+
+            // Cache locally too
+            localStorage.setItem(
+                'epflElements',
+                JSON.stringify(elements)
+            );
+
+            console.log(
+                `☁️ Loaded ${elements.length} elements.`
+            );
+        }
+
+
+        // Add them to the map
         elements.forEach(element => {
 
-            /*
-             * Older saved elements might not have a floor.
-             *
-             * We assign them to floor 0.
-             */
-
             if (element.floor === undefined) {
-                element.floor = '0';
+                element.floor = 0;
             }
 
             addMarker(element);
         });
 
-
         updateElementsList();
     }
+
 
 
     // ============================================================
@@ -1101,6 +1183,21 @@
     // ============================================================
 
     map.on('click', function(e) {
+        
+        map.forEachFeatureAtPixel(e.pixel, function(feature) {
+
+            const elementId = feature.get('elementId');
+
+            if (elementId !== undefined) {
+
+                scrollToElementInList(elementId);
+
+                return true;
+            }
+
+            return false;
+        });
+
 
         if (!placementMode) {
             return;
@@ -1284,7 +1381,7 @@
         
         if (type==='trapdoor') {
             const complement = {
-                id: element.id*2,
+                id: element.id+1,
                 parentId: element.id,
                 name: name + ' top',
                 type: 'trapdoorTop',
@@ -1341,6 +1438,31 @@
     // 22. SIDEBAR ELEMENT LIST
     // ============================================================
 
+    function scrollToElementInList(elementId) {
+
+        const card = document.getElementById(
+            `element-card-${elementId}`
+        );
+
+        if (!card) return;
+
+        // Scroll the sidebar so the element is visible
+        card.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+
+        // Highlight it
+        card.style.transition = 'all 0.3s';
+        card.style.boxShadow = '0 0 0 3px #e94560';
+
+        // Remove highlight after 2 seconds
+        setTimeout(() => {
+            card.style.boxShadow = '';
+        }, 2000);
+    }
+
+
     function updateElementsList() {
 
         const container =
@@ -1369,7 +1491,7 @@
         container.innerHTML =
             elements.map(el => `
 
-                <div class="element-card ${el.status}">
+                <div class="element-card ${el.status}" id="element-card-${el.id}">
 
                     <h4>
                         ${icons[el.type]?.symbol || '📍'}
@@ -1601,13 +1723,64 @@
     // 26. SAVE
     // ============================================================
 
-    function saveElements() {
+    async function saveElements() {
+
+        if (elements.length === 0) {
+
+            const { error } =
+                await supabaseClient
+                    .from('elements')
+                    .delete()
+                    .neq('id', -1);
+
+            if (error) {
+                console.error(
+                    'Could not clear database:',
+                    error
+                );
+            }
+
+            return;
+        }
+
+        const rows = elements.map(element => ({
+            id: element.id,
+            parent_id: element.parentId ?? null,
+            name: element.name,
+            type: element.type,
+            status: element.status,
+            description: element.description || null,
+            lat: element.lat,
+            lng: element.lng,
+            floor: Number(element.floor),
+            created: element.created
+        }));
+
+        const { error } =
+            await supabaseClient
+                .from('elements')
+                .upsert(rows);
+
+        if (error) {
+
+            console.error(
+                'Could not save elements:',
+                error
+            );
+
+            return;
+        }
 
         localStorage.setItem(
             'epflElements',
             JSON.stringify(elements)
         );
+
+        console.log(
+            '☁️ Elements synchronized with Supabase!'
+        );
     }
+
 
 
     // ============================================================
@@ -1665,17 +1838,20 @@
     // 28. INITIALIZE
     // ============================================================
 
-    loadElements();
+    (async function initialize() {
 
+        await loadElements();
 
-    console.log(
-        '💖 EPFL Interactive Map fully initialized!'
-    );
+        console.log(
+            '💖 EPFL Interactive Map fully initialized!'
+        );
 
-    console.log(
-        'Current floor:',
-        selectedFloor
-    );
+        console.log(
+            'Current floor:',
+            selectedFloor
+        );
+
+    })();
 </script>
 
 
