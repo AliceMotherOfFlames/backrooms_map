@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map of the Underworld</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+        
+        /* ========== LOGIN SCREEN STYLES ========== */
+        #loginScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        
+        .login-container {
+            background: #16213e;
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.6);
+            width: 90%;
+            max-width: 420px;
+            text-align: center;
+            border: 1px solid rgba(233, 69, 96, 0.3);
+        }
+        
+        .login-container h1 {
+            color: #e94560;
+            margin-bottom: 10px;
+            font-size: 2rem;
+            text-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+        }
+        
+        .login-container .subtitle {
+            color: #e94560;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+        
+        .login-container p {
+            color: #888;
+            margin-bottom: 35px;
+            font-size: 0.95rem;
+        }
+        
+        .login-form .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        .login-form label {
+            display: block;
+            color: #ddd;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .login-form input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #0f3460;
+            border-radius: 10px;
+            background: #0f3460;
+            color: white;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        .login-form input:focus {
+            outline: none;
+            border-color: #e94560;
+            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.2);
+        }
+        
+        .login-form input::placeholder {
+            color: #666;
+        }
+        
+        .login-form button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .login-form button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.4);
+        }
+        
+        .login-form button:disabled {
+            background: #444;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            font-size: 0.9rem;
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(231, 76, 60, 0.1);
+            border-radius: 8px;
+            display: none;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .loading {
+            display: none;
+            color: #e94560;
+            margin-top: 15px;
+            font-size: 0.95rem;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(233, 69, 96, 0.3);
+            border-radius: 50%;
+            border-top-color: #e94560;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* ========== USER INFO BAR ========== */
+        .user-info {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            background: rgba(26, 26, 46, 0.95);
+            padding: 12px 20px;
+            border-radius: 12px;
+            color: white;
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            gap: 20px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(233, 69, 96, 0.3);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        
+        .user-info .user-email {
+            color: #e94560;
+            font-weight: 600;
+        }
+        
+        .user-info button {
+            width: auto;
+            padding: 8px 20px;
+            font-size: 0.85rem;
+            margin: 0;
+            background: transparent;
+            border: 2px solid #e94560;
+            border-radius: 8px;
+        }
+        
+        .user-info button:hover {
+            background: #e94560;
+        }
+        
+        /* ========== MAIN APP ========== */
+        #mainApp {
+            display: none;
+            width: 100%;
+            height: 100vh;
+        }
+        
+        #sidebar {
+            width: 320px;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+        }
+        
+        #sidebar h1 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #e94560;
+        }
+        
+        #sidebar p {
+            color: #aaa;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+        
+        .element-form {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .element-form h3 {
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 12px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+            color: #ddd;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #0f3460;
+            color: white;
+            font-size: 0.9rem;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: 2px solid #e94560;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            background: #e94560;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #ff6b6b;
+            transform: translateY(-2px);
+        }
+        
+        .elements-list {
+            margin-top: 20px;
+        }
+        
+        .elements-list h3 {
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+        
+        .element-card {
+            background: #16213e;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid;
+            transition: all 0.3s;
+        }
+        
+        .element-card:hover {
+            transform: translateX(5px);
+        }
+        
+        .element-card.sealed { border-color: #e74c3c; }
+        .element-card.open { border-color: #27ae60; }
+        .element-card.maintenance { border-color: #f39c12; }
+        .element-card.unknown { border-color: #d3d3d3; }
+        
+        .element-card h4 {
+            font-size: 0.95rem;
+            margin-bottom: 5px;
+        }
+        
+        .element-card .status {
+            font-size: 0.8rem;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+        
+        .element-card .status.sealed { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+        .element-card .status.open { background: rgba(39, 174, 96, 0.2); color: #27ae60; }
+        .element-card .status.maintenance { background: rgba(243, 156, 18, 0.2); color: #f39c12; }
+        .element-card .status.unknown { background: rgba(150,150,150,0.2); color: #d3d3d3; }
+        
+        .element-card .coords {
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        
+        .element-card .actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .element-card button {
+            flex: 1;
+            padding: 6px;
+            font-size: 0.75rem;
+        }
+        
+        .element-card .delete-btn {
+            background: #c0392b;
+        }
+        
+        #map {
+            flex: 1;
+            height: 100vh;
+        }
+        
+        .custom-popup {
+            font-family: 'Segoe UI', sans-serif;
+        }
+        
+        .custom-popup h3 {
+            margin: 0 0 8px 0;
+            font-size: 1.1rem;
+        }
+        
+        .custom-popup .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .custom-popup .status-badge.sealed { background: #ffebee; color: #c62828; }
+        .custom-popup .status-badge.open { background: #e8f5e9; color: #2e7d32; }
+        .custom-popup .status-badge.maintenance { background: #fff3e0; color: #ef6c00; }
+        .custom-popup .status-badge.unknown { background: #d3d3d3; color: #d3d3d3; }
+        
+        .legend {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            line-height: 1.8;
+        }
+        
+        .legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 0.9rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        
+        .click-hint {
+            background: rgba(233, 69, 96, 0.1);
+            border: 1px dashed #e94560;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .click-hint.active {
+            display: block;
+        }
+        
+        .instructions {
+            background: #0f3460;
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .instructions strong {
+            color: #e94560;
+        }
+    </style>
+</head>
+<body>
+    <!-- ========== LOGIN SCREEN ========== -->
+    <div id="loginScreen">
+        <div class="login-container">
+            <h1>🗝️ Map of the Underworld</h1>
+            <div class="subtitle">Restricted Access</div>
+            <p>Authorized personnel only. Please authenticate.</p>
+            
+            <form class="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginEmail">📧 Email Address</label>
+                    <input type="email" id="loginEmail" placeholder="agent@backrooms.gov" required autocomplete="email">
+                </div>
+                
+                <div class="form-group">
+                    <label for="loginPassword">🔒 Password</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+                </div>
+                
+                <button type="submit" id="loginBtn">
+                    <span id="btnText">Enter the Backrooms</span>
+                </button>
+                
+                <div class="loading" id="loginLoading">
+                    <span class="spinner"></span>Authenticating...
+                </div>
+                <div class="error-message" id="loginError"></div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- ========== USER INFO BAR ========== -->
+    <div class="user-info" id="userInfo">
+        <span>👤 Logged in as <span class="user-email" id="userEmail"></span></span>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <!-- ========== MAIN APP ========== -->
+    <div id="mainApp">
+        <div id="sidebar">
+            <h1>Map and database of the Backrooms</h1>
+            <p>Add and manage elements on the EPFL campus map</p>
+            
+            <div class="instructions">
+                <strong>How to use:</strong><br>
+                1. Enter element details below<br>
+                2. Click "Start Placement" then click on the map<br>
+                3. Or manually enter coordinates<br>
+                4. Your elements are saved locally
+            </div>
+            
+            <div class="click-hint" id="clickHint">
+                👆 Click anywhere on the map to place your element
+            </div>
+            
+            <div class="element-form">
+                <h3>➕ Add New Element</h3>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="elementName" placeholder="e.g., Building BC Door">
+                </div>
+                <div class="form-group">
+                    <label>Type</label>
+                    <select id="elementType">
+                        <option value="door">🚪 Door</option>
+                        <option value="gate">⛩️ Gate</option>
+                        <option value="room">🏠 Room</option>
+                        <option value="trapdoor">🪜 Trapdoor</option>
+                        <option value="elevator">🛗 Elevator</option>
+                        <option value="other">📍 Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="elementStatus">
+                        <option value="open">✅ Open</option>
+                        <option value="sealed">🔒 Sealed</option>
+                        <option value="maintenance">🔧 Maintenance</option>
+                        <option value="unknown"> ? Unknown ?</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="elementDesc" placeholder="Optional notes...">
+                </div>
+                <div class="form-group">
+                    <label>Or click map to auto-fill:</label>
+                    <input type="text" id="elementCoords" placeholder="Lat, Lng (click map)" readonly>
+                </div>
+                <button onclick="startPlacement()">📍 Start Placement Mode</button>
+                <button onclick="addElement()" style="margin-top: 8px; background: #27ae60;">💾 Save Element</button>
+            </div>
+            <div class="floor-selector">
+                <label>🏬 Select Floor:</label>
+                <select id="floorSelect">
+                    <option value="-1">Basement (-1)</option>
+                    <option value="0" selected>Ground Floor (0)</option>
+                    <option value="1">Floor 1</option>
+                    <option value="2">Floor 2</option>
+                    <option value="3">Floor 3</option>
+                    <option value="4">Floor 4</option>
+                    <option value="5">Floor 5</option>
+                </select>
+            </div>
+            
+            <button onclick="changeFloor()">Apply Floor Change</button>
+            
+            <div class="elements-list">
+                <h3>📋 Your Elements (<span id="count">0</span>)</h3>
+                <div id="elementsList"></div>
+            </div>
+            
+            <button onclick="clearAll()" style="background: #c0392b; margin-top: 20px;">🗑️ Clear All Elements</button>
+            <button onclick="exportData()" style="margin-top: 8px; background: #3498db;">💾 Export Data</button>
+        
+        
+        </div>
+        
+        <div id="map"></div>
+    </div>
+
+    <script>
+    // =====
+    // Supabase initialisation
+    // =====
+    const SUPABASE_URL = 'https://yvzurhemtulapzpvxdef.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_oENYVkLaNh49XdA0SObgDA_QfKQd0qM';
+
+    const supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+    );
+
+    // ============================================================
+    // AUTHENTICATION SYSTEM
+    // ============================================================
+    
+    // Check if user is already logged in
+    async function checkSession() {
+        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        
+        if (session) {
+            showApp(session.user);
+        } else {
+            showLogin();
+        }
+    }
+    
+    function showLogin() {
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('mainApp').style.display = 'none';
+        document.getElementById('userInfo').style.display = 'none';
+    }
+    
+    function showApp(user) {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'flex';
+        document.getElementById('userInfo').style.display = 'flex';
+        document.getElementById('userEmail').textContent = user.email;
+        
+        // Initialize map only after login
+        if (!window.mapInitialized) {
+            initializeMap();
+            window.mapInitialized = true;
+        }
+    }
+    
+    async function handleLogin(e) {
+        e.preventDefault();
+        
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const btn = document.getElementById('loginBtn');
+        const btnText = document.getElementById('btnText');
+        const loading = document.getElementById('loginLoading');
+        const errorDiv = document.getElementById('loginError');
+        
+        // Show loading state
+        btn.disabled = true;
+        btnText.textContent = 'Authenticating...';
+        loading.classList.add('show');
+        errorDiv.classList.remove('show');
+        
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: email,
+            password: password
+        });
+        
+        // Reset loading state
+        btn.disabled = false;
+        btnText.textContent = 'Enter the Backrooms';
+        loading.classList.remove('show');
+        
+        if (error) {
+            errorDiv.textContent = '❌ ' + error.message;
+            errorDiv.classList.add('show');
+            return;
+        }
+        
+        showApp(data.user);
+    }
+    
+    async function logout() {
+        await supabaseClient.auth.signOut();
+        showLogin();
+        // Clear form
+        document.getElementById('loginEmail').value = '';
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('loginError').classList.remove('show');
+    }
+    
+    // Listen for auth state changes
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+            showApp(session.user);
+        } else if (event === 'SIGNED_OUT') {
+            showLogin();
+        }
+    });
+
+    // Check session on page load
+    checkSession();
+
+    // ============================================================
+    // MAP INITIALIZATION (moved into function)
+    // ============================================================
+    
+    function initializeMap() {
+        // 1. EPFL PROJECTION
+        proj4.defs(
+            'EPSG:2056',
+            '+proj=somerc ' +
+            '+lat_0=46.95240555555556 ' +
+            '+lon_0=7.439583333333333 ' +
+            '+k_0=1 ' +
+            '+x_0=2600000 ' +
+            '+y_0=1200000 ' +
+            '+ellps=bessel ' +
+            '+towgs84=674.374,15.056,405.346,0,0,0,0 ' +
+            '+units=m ' +
+            '+no_defs'
+        );
+
+        ol.proj.proj4.register(proj4);
+
+        const projection = new ol.proj.Projection({
+            code: 'EPSG:2056',
+            extent: [2420000, 1030000, 2900000, 1350000],
+            units: 'm'
+        });
+
+        // 2. EPFL CENTER
+        const epflCenter = [
+            2533356.8320883964,
+            1152556.2346489413
+        ];
+
+        // 3. EPFL TILE GRID
+        const epflResolutions = [
+            4000, 3750, 3500, 3250, 3000, 2750, 2500, 2250, 2000, 1750,
+            1500, 1250, 1000, 750, 650, 500, 250, 100, 50, 20, 10, 5,
+            2.5, 2, 1.5, 1, 0.5, 0.25, 0.1, 0.05
+        ];
+
+        const epflTileGrid = new ol.tilegrid.TileGrid({
+            extent: [2420000, 1030000, 2900000, 1350000],
+            origin: [2420000, 1350000],
+            resolutions: epflResolutions,
+            tileSize: [256, 256]
+        });
+
+        // 4. OSM BASE MAP
+        const osmLayer = new ol.layer.Tile({
+            source: new ol.source.XYZ({
+                url: 'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+                    '1.0.0/osm-wmts/default/20250317/2056/' +
+                    '{z}/{y}/{x}.png?1786322938=',
+                projection: projection,
+                tileGrid: epflTileGrid,
+                wrapX: false
+            }),
+            opacity: 1
+        });
+
+        // 5. OVERVIEW BUILDINGS
+        const overviewBuildingsLayer = new ol.layer.Tile({
+            source: new ol.source.XYZ({
+                url: 'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+                    '1.0.0/batiments/default/20231011/99/2056/' +
+                    '{z}/{y}/{x}.png?1786322938=',
+                projection: projection,
+                tileGrid: epflTileGrid,
+                wrapX: false
+            }),
+            opacity: 1,
+            minZoom: 20,
+            maxZoom: 24
+        });
+
+        // 6. FLOOR-SPECIFIC BUILDINGS
+        let selectedFloor = document.getElementById('floorSelect').value;
+
+        const floorBuildingsSource = new ol.source.XYZ({
+            url: 'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+                '1.0.0/batiments/default/20231011/' +
+                selectedFloor +
+                '/2056/{z}/{y}/{x}.png?1786322938=',
+            projection: projection,
+            tileGrid: epflTileGrid,
+            wrapX: false
+        });
+
+        const floorBuildingsLayer = new ol.layer.Tile({
+            source: floorBuildingsSource,
+            opacity: 1,
+            minZoom: 25,
+            maxZoom: 29
+        });
+
+        // 7. BUILDING OUTLINES (WMS)
+        const buildingsLayerWMS = new ol.layer.Tile({
+            source: new ol.source.TileWMS({
+                url: 'https://plan.epfl.ch/mapserv_proxy',
+                params: {
+                    'ogcserver': 'MapServer',
+                    'cache_version': '2d629817cd324addb5a003deaf5ee089',
+                    'LAYERS': 'batiments',
+                    'FORMAT': 'image/png',
+                    'TRANSPARENT': 'true',
+                    'VERSION': '1.3.0',
+                    'floor': selectedFloor,
+                    'lang': 'en',
+                    'SERVERTYPE': 'mapserver'
+                },
+                projection: projection,
+                attributions: '© EPFL'
+            }),
+            opacity: 1
+        });
+
+        // 8. LABELS (WMS)
+        const labelsLayer = new ol.layer.Tile({
+            source: new ol.source.TileWMS({
+                url: 'https://plan.epfl.ch/mapserv_proxy',
+                params: {
+                    'ogcserver': 'MapServer',
+                    'cache_version': '2d629817cd324addb5a003deaf5ee089',
+                    'LAYERS': 'locaux_labels,batiments_routes_labels',
+                    'FORMAT': 'image/png',
+                    'TRANSPARENT': 'true',
+                    'VERSION': '1.3.0',
+                    'floor': selectedFloor,
+                    'lang': 'en',
+                    'SERVERTYPE': 'mapserver'
+                },
+                projection: projection,
+                attributions: '© EPFL'
+            }),
+            opacity: 1
+        });
+
+        // 9. ELEMENT LAYERS
+        const elementsSource = new ol.source.Vector();
+        const elementsLayer = new ol.layer.Vector({
+            source: elementsSource
+        });
+
+        const tempSource = new ol.source.Vector();
+        const tempLayer = new ol.layer.Vector({
+            source: tempSource
+        });
+
+        // 10. CREATE MAP
+        window.map = new ol.Map({
+            target: 'map',
+            layers: [
+                osmLayer,
+                overviewBuildingsLayer,
+                floorBuildingsLayer,
+                buildingsLayerWMS,
+                labelsLayer,
+                elementsLayer,
+                tempLayer
+            ],
+            view: new ol.View({
+                projection: projection,
+                center: epflCenter,
+                zoom: 25,
+                maxZoom: 29,
+                minZoom: 16,
+                resolutions: epflResolutions
+            })
+        });
+
+        console.log('✨ EPFL map created!');
+
+        // 11. LEGEND
+        const legend = document.createElement('div');
+        legend.className = 'legend';
+        legend.innerHTML = `
+            <h4>Status Legend</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #27ae60;"></div>
+                <span>Open</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e74c3c;"></div>
+                <span>Sealed</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f39c12;"></div>
+                <span>Maintenance</span>
+            </div>
+        `;
+        legend.style.position = 'absolute';
+        legend.style.bottom = '20px';
+        legend.style.right = '20px';
+        legend.style.zIndex = '1000';
+        document.getElementById('map').appendChild(legend);
+
+        // 12. FLOOR CHANGING
+        window.changeFloor = function() {
+            selectedFloor = document.getElementById('floorSelect').value;
+            console.log('Changing to floor:', selectedFloor);
+
+            floorBuildingsSource.setUrl(
+                'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+                '1.0.0/batiments/default/20231011/' +
+                selectedFloor +
+                '/2056/{z}/{y}/{x}.png?1786322938='
+            );
+            floorBuildingsSource.refresh();
+
+            buildingsLayerWMS.getSource().updateParams({
+                'floor': selectedFloor
+            });
+
+            labelsLayer.getSource().updateParams({
+                'floor': selectedFloor
+            });
+
+            tempSource.clear();
+            updateElementVisibility();
+
+            console.log('Floor changed to:', selectedFloor);
+        };
+
+        // 13. CUSTOM ELEMENT ICONS
+        const icons = {
+            door: { color: '#8e44ad', symbol: '🚪' },
+            gate: { color: '#e74c3c', symbol: '⛩️' },
+            room: { color: '#3498db', symbol: '🏠' },
+            trapdoor: { color: '#e74c3c', symbol: '🪜' },
+            trapdoorTop: { color: '#f39c12', symbol: '🕳️' },
+            elevator: { color: '#f39c12', symbol: '🛗' },
+            other: { color: '#95a5a6', symbol: '📍' }
+        };
+
+        const statusColors = {
+            sealed: '#e74c3c',
+            open: '#27ae60',
+            maintenance: '#f39c12',
+            unknown: '#d3d3d3',
+        };
+
+        // 14. STATE
+        let elements = [];
+        let placementMode = false;
+        let markers = {};
+
+        // 15. ELEMENT STYLE
+        function createElementStyle(type, status) {
+            const iconInfo = icons[type] || icons.other;
+            const color = statusColors[status] || '#95a5a6';
+
+            return new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 12,
+                    fill: new ol.style.Fill({ color: color }),
+                    stroke: new ol.style.Stroke({
+                        color: 'white',
+                        width: 3
+                    })
+                }),
+                text: new ol.style.Text({
+                    text: iconInfo.symbol,
+                    font: '16px Segoe UI Emoji',
+                    offsetY: 0,
+                    fill: new ol.style.Fill({ color: 'white' })
+                })
+            });
+        }
+
+        // 16. ADD ELEMENT MARKER
+        function addMarker(element) {
+            const coordinate = ol.proj.transform(
+                [element.lng, element.lat],
+                'EPSG:4326',
+                'EPSG:2056'
+            );
+
+            const feature = new ol.Feature({
+                geometry: new ol.geom.Point(coordinate),
+                elementId: element.id,
+                floor: element.floor
+            });
+
+            feature.setStyle(
+                createElementStyle(element.type, element.status)
+            );
+
+            elementsSource.addFeature(feature);
+            markers[element.id] = feature;
+            updateFeatureVisibility(element, feature);
+        }
+
+        // 17. ELEMENT FLOOR VISIBILITY
+        function updateFeatureVisibility(element, feature) {
+            const elementFloor = element.floor !== undefined ? String(element.floor) : '0';
+            const currentFloor = String(selectedFloor);
+
+            if (elementFloor === currentFloor) {
+                feature.setStyle(
+                    createElementStyle(element.type, element.status)
+                );
+            } else if (elementFloor === String(Number(currentFloor) - 1)) {
+                console.log("got it!");
+                if (element.type === 'trapdoor') {
+                    feature.setStyle(
+                        createElementStyle('trapdoorTop', element.status)
+                    );
+                } else {
+                    feature.setStyle(null);
+                }
+            } else {
+                feature.setStyle(null);
+            }
+        }
+
+        function updateElementVisibility() {
+            elements.forEach(element => {
+                const feature = markers[element.id];
+                if (feature) {
+                    updateFeatureVisibility(element, feature);
+                }
+            });
+        }
+
+        // 18. LOAD SAVED ELEMENTS
+        function checkStaleStatuses() {
+            const now = new Date();
+            elements.forEach(element => {
+                if (!element.lastStatusUpdate) return;
+
+                const lastUpdate = new Date(element.lastStatusUpdate);
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+                if (lastUpdate < oneMonthAgo) {
+                    element.status = 'unknown';
+                    let partner = null;
+
+                    if (element.type === 'trapdoor') {
+                        partner = elements.find(e =>
+                            e.type === 'trapdoorTop' && e.parentId === element.id
+                        );
+                    } else if (element.type === 'trapdoorTop') {
+                        partner = elements.find(e =>
+                            e.type === 'trapdoor' && e.id === element.parentId
+                        );
+                    }
+
+                    if (partner) {
+                        partner.status = 'unknown';
+                        partner.lastStatusUpdate = element.lastStatusUpdate;
+                    }
+                }
+            });
+            saveElements();
+        }
+
+        async function loadElements() {
+            console.log('☁️ Loading elements from Supabase...');
+
+            const { data, error } = await supabaseClient
+                .from('elements')
+                .select('*')
+                .order('id');
+
+            if (error) {
+                console.error('Could not load elements from Supabase:', error);
+                elements = JSON.parse(localStorage.getItem('epflElements')) || [];
+                console.log('📦 Loaded local backup instead.');
+            } else {
+                elements = data.map(row => ({
+                    id: row.id,
+                    parentId: row.parent_id,
+                    name: row.name,
+                    type: row.type,
+                    status: row.status,
+                    description: row.description || '',
+                    lat: row.lat,
+                    lng: row.lng,
+                    floor: row.floor,
+                    created: row.created,
+                    lastStatusUpdate: row.last_status_update
+                }));
+                localStorage.setItem('epflElements', JSON.stringify(elements));
+                console.log(`☁️ Loaded ${elements.length} elements.`);
+            }
+
+            elements.forEach(element => {
+                if (element.floor === undefined) element.floor = 0;
+                addMarker(element);
+            });
+
+            updateElementsList();
+        }
+
+        // 19. START PLACEMENT MODE
+        window.startPlacement = function() {
+            placementMode = true;
+            document.getElementById('clickHint').classList.add('active');
+            document.getElementById('map').style.cursor = 'crosshair';
+        };
+
+        // 20. MAP CLICK
+        window.map.on('click', function(e) {
+            window.map.forEachFeatureAtPixel(e.pixel, function(feature) {
+                const elementId = feature.get('elementId');
+                if (elementId !== undefined) {
+                    scrollToElementInList(elementId);
+                    return true;
+                }
+                return false;
+            });
+
+            if (!placementMode) return;
+
+            const [lng, lat] = ol.proj.transform(
+                e.coordinate,
+                'EPSG:2056',
+                'EPSG:4326'
+            );
+
+            document.getElementById('elementCoords').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            tempSource.clear();
+
+            const tempFeature = new ol.Feature({
+                geometry: new ol.geom.Point(e.coordinate)
+            });
+
+            tempFeature.setStyle(
+                new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 9,
+                        fill: new ol.style.Fill({ color: '#e94560' }),
+                        stroke: new ol.style.Stroke({
+                            color: 'white',
+                            width: 3
+                        })
+                    })
+                })
+            );
+
+            tempSource.addFeature(tempFeature);
+            placementMode = false;
+            document.getElementById('clickHint').classList.remove('active');
+            document.getElementById('map').style.cursor = '';
+        });
+
+        // 21. ADD ELEMENT
+        window.addElement = function() {
+            const name = document.getElementById('elementName').value;
+            const type = document.getElementById('elementType').value;
+            const status = document.getElementById('elementStatus').value;
+            const description = document.getElementById('elementDesc').value;
+            const coordsInput = document.getElementById('elementCoords').value;
+
+            if (!name) {
+                alert('Please enter a name!');
+                return;
+            }
+
+            let lat, lng;
+
+            if (coordsInput) {
+                [lat, lng] = coordsInput.split(',').map(c => parseFloat(c.trim()));
+            } else {
+                alert('Please place the element on the map!');
+                return;
+            }
+
+            const now = new Date().toISOString();
+            const element = {
+                id: Date.now(),
+                name,
+                type,
+                status,
+                description,
+                lat,
+                lng,
+                floor: selectedFloor,
+                created: now,
+                lastStatusUpdate: now
+            };
+
+            elements.push(element);
+
+            if (type === 'trapdoor') {
+                const complement = {
+                    id: element.id + 1,
+                    parentId: element.id,
+                    name: name + ' top',
+                    type: 'trapdoorTop',
+                    status,
+                    description,
+                    lat,
+                    lng,
+                    floor: Number(selectedFloor) + 1,
+                    created: now,
+                    lastStatusUpdate: now
+                };
+                elements.push(complement);
+                addMarker(complement);
+            }
+
+            saveElements();
+            addMarker(element);
+            updateElementsList();
+
+            document.getElementById('elementName').value = '';
+            document.getElementById('elementDesc').value = '';
+            document.getElementById('elementCoords').value = '';
+            tempSource.clear();
+
+            console.log('Added element on floor:', selectedFloor);
+        };
+
+        // 22. SIDEBAR ELEMENT LIST
+        function scrollToElementInList(elementId) {
+            const card = document.getElementById(`element-card-${elementId}`);
+            if (!card) return;
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.style.transition = 'all 0.3s';
+            card.style.boxShadow = '0 0 0 3px #e94560';
+            setTimeout(() => { card.style.boxShadow = ''; }, 2000);
+        }
+
+        function updateElementsList() {
+            const container = document.getElementById('elementsList');
+            document.getElementById('count').textContent = elements.length;
+
+            if (elements.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No elements yet. Add one above!</p>';
+                return;
+            }
+
+            container.innerHTML = elements.map(el => `
+                <div class="element-card ${el.status}" id="element-card-${el.id}">
+                    <h4>${icons[el.type]?.symbol || '📍'} ${el.name}</h4>
+                    <span class="status ${el.status}">${el.status.toUpperCase()}</span>
+                    <div class="coords">
+                        📍 ${el.lat.toFixed(5)}, ${el.lng.toFixed(5)}<br>
+                        🏬 Floor: ${el.floor ?? '0'}
+                    </div>
+                    <div style="font-size: 0.75rem; color: #888; margin-bottom: 8px;">
+                        🕐 Last status update: ${el.lastStatusUpdate ? new Date(el.lastStatusUpdate).toLocaleString() : 'Never'}
+                    </div>
+                    ${el.description ? `<div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px;">${el.description}</div>` : ''}
+                    <div class="actions">
+                        <button onclick="changeStatus(${el.id}, 'open')" style="background: #27ae60;">Open</button>
+                        <button onclick="changeStatus(${el.id}, 'sealed')" style="background: #e74c3c;">Seal</button>
+                        <button onclick="changeStatus(${el.id}, 'maintenance')" style="background: #f39c12;">Maint.</button>
+                        <button onclick="changeStatus(${el.id}, 'unknown')" style="background: #d3d3d3;">🤷🏻‍♀️</button>
+                        <button class="delete-btn" onclick="deleteElement(${el.id})">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 23. CHANGE STATUS
+        window.changeStatus = async function(id, newStatus) {
+            const element = elements.find(e => e.id === id);
+            if (!element) return;
+
+            if (!confirm(`Change ${element.type}'s status to ${newStatus}?`)) return;
+
+            const now = new Date().toISOString();
+            element.status = newStatus;
+            element.lastStatusUpdate = now;
+
+            let partner = null;
+            if (element.type === 'trapdoor') {
+                partner = elements.find(e =>
+                    e.type === 'trapdoorTop' && e.parentId === element.id
+                );
+            } else if (element.type === 'trapdoorTop') {
+                partner = elements.find(e =>
+                    e.type === 'trapdoor' && e.id === element.parentId
+                );
+            }
+
+            if (partner) {
+                partner.status = newStatus;
+                partner.lastStatusUpdate = now;
+            }
+
+            saveElements();
+
+            if (markers[element.id]) {
+                updateFeatureVisibility(element, markers[element.id]);
+            }
+            if (partner && markers[partner.id]) {
+                updateFeatureVisibility(partner, markers[partner.id]);
+            }
+
+            updateElementsList();
+        };
+
+        // 24. DELETE ELEMENT
+        window.deleteElement = function(id) {
+            const element = elements.find(e => e.id === id);
+            if (!element) return;
+
+            if (!confirm(`Delete this ${element.type}? This cannot be undone!`)) return;
+
+            let idsToDelete = [id];
+
+            if (element.type === 'trapdoor') {
+                const top = elements.find(e =>
+                    e.type === 'trapdoorTop' &&
+                    (e.parentId === element.id || e.id === element.id + 1)
+                );
+                if (top) idsToDelete.push(top.id);
+            }
+
+            if (element.type === 'trapdoorTop') {
+                let bottom = elements.find(e =>
+                    e.type === 'trapdoor' && e.id === element.parentId
+                );
+                if (!bottom) {
+                    bottom = elements.find(e =>
+                        e.type === 'trapdoor' && e.id === element.id - 1
+                    );
+                }
+                if (bottom) idsToDelete.push(bottom.id);
+            }
+
+            idsToDelete.forEach(elementId => {
+                const feature = markers[elementId];
+                if (feature) {
+                    elementsSource.removeFeature(feature);
+                    delete markers[elementId];
+                }
+            });
+
+            elements = elements.filter(e => !idsToDelete.includes(e.id));
+            saveElements();
+            updateElementsList();
+        };
+
+        // 25. CLEAR EVERYTHING
+        window.clearAll = function() {
+            if (!confirm('Delete all elements? This cannot be undone!')) return;
+
+            elements = [];
+            markers = {};
+            elementsSource.clear();
+            tempSource.clear();
+            saveElements();
+            updateElementsList();
+        };
+
+        // 26. SAVE
+        window.saveElements = async function() {
+            if (elements.length === 0) {
+                const { error } = await supabaseClient
+                    .from('elements')
+                    .delete()
+                    .neq('id', -1);
+                if (error) console.error('Could not clear database:', error);
+                return;
+            }
+
+            const rows = elements.map(element => ({
+                id: element.id,
+                parent_id: element.parentId ?? null,
+                name: element.name,
+                type: element.type,
+                status: element.status,
+                description: element.description || null,
+                lat: element.lat,
+                lng: element.lng,
+                floor: Number(element.floor),
+                created: element.created,
+                last_status_update: element.lastStatusUpdate || null,
+            }));
+
+            const { error } = await supabaseClient.from('elements').upsert(rows);
+            if (error) {
+                console.error('Could not save elements:', error);
+                return;
+            }
+
+            localStorage.setItem('epflElements', JSON.stringify(elements));
+            console.log('☁️ Elements synchronized with Supabase!');
+        };
+
+        // 27. EXPORT
+        window.exportData = function() {
+            const dataStr = JSON.stringify(elements, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `epfl-map-elements-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        // 28. INITIALIZE
+        (async function initialize() {
+            await loadElements();
+            checkStaleStatuses();
+            console.log('💖 EPFL Interactive Map fully initialized!');
+            console.log('Current floor:', selectedFloor);
+        })();
+    }
+    </script>
+</body>
+</html>
