@@ -250,7 +250,7 @@
 <body>
     <div id="sidebar">
         <h1>Map and database of the Backrooms</h1>
-        <p>Add and manage elements in The Realm Below</p>
+        <p>Add and manage elements on the EPFL campus map</p>
         
         <div class="instructions">
             <strong>How to use:</strong><br>
@@ -1069,6 +1069,60 @@
     // ============================================================
     // 18. LOAD SAVED ELEMENTS
     // ============================================================
+    function checkStaleStatuses() {
+
+        const now = new Date();
+
+        elements.forEach(element => {
+
+            if (!element.lastStatusUpdate) {
+                return;
+            }
+
+            const lastUpdate =
+                new Date(element.lastStatusUpdate);
+
+            const oneMonthAgo = new Date();
+
+            oneMonthAgo.setMonth(
+                oneMonthAgo.getMonth() - 1
+            );
+
+            if (lastUpdate < oneMonthAgo) {
+
+                element.status = 'unknown';
+
+                // Synchronize trapdoor partner
+                let partner = null;
+
+                if (element.type === 'trapdoor') {
+
+                    partner = elements.find(e =>
+                        e.type === 'trapdoorTop' &&
+                        e.parentId === element.id
+                    );
+
+                } else if (element.type === 'trapdoorTop') {
+
+                    partner = elements.find(e =>
+                        e.type === 'trapdoor' &&
+                        e.id === element.parentId
+                    );
+                }
+
+                if (partner) {
+
+                    partner.status = 'unknown';
+
+                    partner.lastStatusUpdate =
+                        element.lastStatusUpdate;
+                }
+            }
+        });
+
+        saveElements();
+    }
+
 
     async function loadElements() {
 
@@ -1128,8 +1182,10 @@
                     row.floor,
 
                 created:
-                    row.created
-
+                    row.created, 
+                  
+                lastStatusUpdate:
+                    row.last_status_update
             }));
 
             // Cache locally too
@@ -1510,6 +1566,18 @@
                         🏬 Floor:
                         ${el.floor ?? '0'}
                     </div>
+                    <div style="
+                        font-size: 0.75rem;
+                        color: #888;
+                        margin-bottom: 8px;
+                    ">
+                        🕐 Last status update:
+                        ${
+                            el.lastStatusUpdate
+                                ? new Date(el.lastStatusUpdate).toLocaleString()
+                                : 'Never'
+                        }
+                    </div>
 
                     ${
                         el.description
@@ -1569,44 +1637,68 @@
     // 23. CHANGE STATUS
     // ============================================================
 
-    function changeStatus(
-        id,
-        newStatus
-    ) {
+    async function changeStatus(id, newStatus) {
 
-        const element =
-            elements.find(
-                e => e.id === id
-            );
-
+        const element = elements.find(e => e.id === id);
 
         if (!element) {
             return;
         }
 
+        const now = new Date().toISOString();
 
-        element.status =
-            newStatus;
+        // Change selected element
+        element.status = newStatus;
+        element.lastStatusUpdate = now;
 
+        // Find its trapdoor partner
+        let partner = null;
 
-        saveElements();
+        if (element.type === 'trapdoor') {
 
+            partner = elements.find(e =>
+                e.type === 'trapdoorTop' &&
+                e.parentId === element.id
+            );
 
-        const feature =
-            markers[id];
+        } else if (element.type === 'trapdoorTop') {
 
-
-        if (feature) {
-
-            updateFeatureVisibility(
-                element,
-                feature
+            partner = elements.find(e =>
+                e.type === 'trapdoor' &&
+                e.id === element.parentId
             );
         }
 
+        // Synchronize the partner
+        if (partner) {
 
+            partner.status = newStatus;
+            partner.lastStatusUpdate = now;
+        }
+
+        // Save
+        saveElements();
+
+        // Update map markers
+        if (markers[element.id]) {
+            updateFeatureVisibility(
+                element,
+                markers[element.id]
+            );
+        }
+
+        if (partner && markers[partner.id]) {
+            updateFeatureVisibility(
+                partner,
+                markers[partner.id]
+            );
+        }
+
+        // Refresh sidebar
         updateElementsList();
     }
+
+
 
 
     // ============================================================
@@ -1753,7 +1845,10 @@
             lat: element.lat,
             lng: element.lng,
             floor: Number(element.floor),
-            created: element.created
+            created: element.created,
+            last_status_update:
+                element.lastStatusUpdate || null,
+
         }));
 
         const { error } =
@@ -1839,7 +1934,8 @@
     // ============================================================
 
     (async function initialize() {
-
+        
+        checkStaleStatuses();
         await loadElements();
 
         console.log(
