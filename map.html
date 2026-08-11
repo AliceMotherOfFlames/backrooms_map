@@ -1644,6 +1644,10 @@
         if (!element) {
             return;
         }
+        
+        if (!confirm(`Change ${element.type}'s status to ${newStatus}?`))     {
+            return;
+        }
 
         const now = new Date().toISOString();
 
