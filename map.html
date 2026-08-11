@@ -1410,7 +1410,8 @@
 
         // IMPORTANT:
         // Save the floor with the element.
-
+        const now = new Date().toISOString();
+        
         const element = {
 
             id: Date.now(),
@@ -1429,8 +1430,9 @@
 
             floor: selectedFloor,
 
-            created:
-                new Date().toISOString()
+            created: now, 
+            
+            lastStatusUpdate: now
         };
         
         elements.push(element);
@@ -1446,8 +1448,9 @@
                 lat,
                 lng, 
                 floor: Number(selectedFloor)+1,
-                created:
-                    new Date().toISOString()
+                created: now, 
+            
+                lastStatusUpdate: now
             };
             elements.push(complement)
             addMarker(complement);
@@ -1939,9 +1942,10 @@
 
     (async function initialize() {
         
-        checkStaleStatuses();
+        
         await loadElements();
-
+        checkStaleStatuses();
+        
         console.log(
             '💖 EPFL Interactive Map fully initialized!'
         );
