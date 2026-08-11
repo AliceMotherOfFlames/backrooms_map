@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPFL Interactive Map</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+        
+        #sidebar {
+            width: 320px;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+        }
+        
+        #sidebar h1 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #e94560;
+        }
+        
+        #sidebar p {
+            color: #aaa;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+        
+        .element-form {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .element-form h3 {
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 12px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+            color: #ddd;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #0f3460;
+            color: white;
+            font-size: 0.9rem;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: 2px solid #e94560;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            background: #e94560;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #ff6b6b;
+            transform: translateY(-2px);
+        }
+        
+        .elements-list {
+            margin-top: 20px;
+        }
+        
+        .elements-list h3 {
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+        
+        .element-card {
+            background: #16213e;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid;
+            transition: all 0.3s;
+        }
+        
+        .element-card:hover {
+            transform: translateX(5px);
+        }
+        
+        .element-card.sealed { border-color: #e74c3c; }
+        .element-card.open { border-color: #27ae60; }
+        .element-card.maintenance { border-color: #f39c12; }
+        .element-card.unknown { border-color: #d3d3d3; }
+        
+        .element-card h4 {
+            font-size: 0.95rem;
+            margin-bottom: 5px;
+        }
+        
+        .element-card .status {
+            font-size: 0.8rem;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+        
+        .element-card .status.sealed { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+        .element-card .status.open { background: rgba(39, 174, 96, 0.2); color: #27ae60; }
+        .element-card .status.maintenance { background: rgba(243, 156, 18, 0.2); color: #f39c12; }
+        .element-card .status.unknown { background: rgba(150,150,150,0.2); color: #d3d3d3; }
+        
+        .element-card .coords {
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        
+        .element-card .actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .element-card button {
+            flex: 1;
+            padding: 6px;
+            font-size: 0.75rem;
+        }
+        
+        .element-card .delete-btn {
+            background: #c0392b;
+        }
+        
+        #map {
+            flex: 1;
+            height: 100vh;
+        }
+        
+        .custom-popup {
+            font-family: 'Segoe UI', sans-serif;
+        }
+        
+        .custom-popup h3 {
+            margin: 0 0 8px 0;
+            font-size: 1.1rem;
+        }
+        
+        .custom-popup .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .custom-popup .status-badge.sealed { background: #ffebee; color: #c62828; }
+        .custom-popup .status-badge.open { background: #e8f5e9; color: #2e7d32; }
+        .custom-popup .status-badge.maintenance { background: #fff3e0; color: #ef6c00; }
+        .custom-popup .status-badge.unknown { background: #d3d3d3; color: #d3d3d3; }
+        
+        .legend {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            line-height: 1.8;
+        }
+        
+        .legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 0.9rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        
+        .click-hint {
+            background: rgba(233, 69, 96, 0.1);
+            border: 1px dashed #e94560;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .click-hint.active {
+            display: block;
+        }
+        
+        .instructions {
+            background: #0f3460;
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .instructions strong {
+            color: #e94560;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1>🏛️ EPFL Map Manager</h1>
+        <p>Add and manage elements on the EPFL campus map</p>
+        
+        <div class="instructions">
+            <strong>How to use:</strong><br>
+            1. Enter element details below<br>
+            2. Click "Start Placement" then click on the map<br>
+            3. Or manually enter coordinates<br>
+            4. Your elements are saved locally
+        </div>
+        
+        <div class="click-hint" id="clickHint">
+            👆 Click anywhere on the map to place your element
+        </div>
+        
+        <div class="element-form">
+            <h3>➕ Add New Element</h3>
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="elementName" placeholder="e.g., Building BC Door">
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select id="elementType">
+                    <option value="door">🚪 Door</option>
+                    <option value="gate">⛩️ Gate</option>
+                    <option value="room">🏠 Room</option>
+                    <option value="trapdoor">🪜 Trapdoor</option>
+                    <option value="elevator">🛗 Elevator</option>
+                    <option value="other">📍 Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="elementStatus">
+                    <option value="open">✅ Open</option>
+                    <option value="sealed">🔒 Sealed</option>
+                    <option value="maintenance">🔧 Maintenance</option>
+                    <option value="unknown"> ? Unknown ?</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="elementDesc" placeholder="Optional notes...">
+            </div>
+            <div class="form-group">
+                <label>Or click map to auto-fill:</label>
+                <input type="text" id="elementCoords" placeholder="Lat, Lng (click map)" readonly>
+            </div>
+            <button onclick="startPlacement()">📍 Start Placement Mode</button>
+            <button onclick="addElement()" style="margin-top: 8px; background: #27ae60;">💾 Save Element</button>
+        </div>
+        <div class="floor-selector">
+            <label>🏬 Select Floor:</label>
+            <select id="floorSelect">
+                <option value="-1">Basement (-1)</option>
+                <option value="0" selected>Ground Floor (0)</option>
+                <option value="1">Floor 1</option>
+                <option value="2">Floor 2</option>
+                <option value="3">Floor 3</option>
+                <option value="4">Floor 4</option>
+                <option value="5">Floor 5</option>
+            </select>
+        </div>
+        
+        <button onclick="changeFloor()">Apply Floor Change</button>
+        
+        <div class="elements-list">
+            <h3>📋 Your Elements (<span id="count">0</span>)</h3>
+            <div id="elementsList"></div>
+        </div>
+        
+        <button onclick="clearAll()" style="background: #c0392b; margin-top: 20px;">🗑️ Clear All Elements</button>
+        <button onclick="exportData()" style="margin-top: 8px; background: #3498db;">💾 Export Data</button>
+    
+    
+    </div>
+    
+    <div id="map"></div>
+
+    <script>
+    // ============================================================
+    // 1. EPFL PROJECTION
+    // ============================================================
+
+    proj4.defs(
+        'EPSG:2056',
+        '+proj=somerc ' +
+        '+lat_0=46.95240555555556 ' +
+        '+lon_0=7.439583333333333 ' +
+        '+k_0=1 ' +
+        '+x_0=2600000 ' +
+        '+y_0=1200000 ' +
+        '+ellps=bessel ' +
+        '+towgs84=674.374,15.056,405.346,0,0,0,0 ' +
+        '+units=m ' +
+        '+no_defs'
+    );
+
+    ol.proj.proj4.register(proj4);
+
+    const projection = new ol.proj.Projection({
+        code: 'EPSG:2056',
+        extent: [2420000, 1030000, 2900000, 1350000],
+        units: 'm'
+    });
+
+
+    // ============================================================
+    // 2. EPFL CENTER
+    // ============================================================
+
+    const epflCenter = [
+        2533356.8320883964,
+        1152556.2346489413
+    ];
+
+
+    // ============================================================
+    // 3. EPFL TILE GRID
+    //
+    // These are the resolutions used by the EPFL tile service.
+    //
+    // IMPORTANT:
+    // Array index = EPFL tile zoom number.
+    //
+    // 20 = 10 m
+    // 21 = 5 m
+    // 22 = 2.5 m
+    // 23 = 2 m
+    // 24 = 1.5 m
+    // 25 = 1 m
+    // 26 = 0.5 m
+    // 27 = 0.25 m
+    // 28 = 0.1 m
+    // 29 = 0.05 m
+    // ============================================================
+
+    const epflResolutions = [
+        4000,   // 0
+        3750,   // 1
+        3500,   // 2
+        3250,   // 3
+        3000,   // 4
+        2750,   // 5
+        2500,   // 6
+        2250,   // 7
+        2000,   // 8
+        1750,   // 9
+        1500,   // 10
+        1250,   // 11
+        1000,   // 12
+        750,    // 13
+        650,    // 14
+        500,    // 15
+        250,    // 16
+        100,    // 17
+        50,     // 18
+        20,     // 19
+        10,     // 20
+        5,      // 21
+        2.5,    // 22
+        2,      // 23
+        1.5,    // 24
+        1,      // 25
+        0.5,    // 26
+        0.25,   // 27
+        0.1,    // 28
+        0.05    // 29
+    ];
+
+    const epflTileGrid = new ol.tilegrid.TileGrid({
+        extent: [2420000, 1030000, 2900000, 1350000],
+        origin: [2420000, 1350000],
+        resolutions: epflResolutions,
+        tileSize: [256, 256]
+    });
+
+
+    // ============================================================
+    // 4. OSM BASE MAP
+    //
+    // This is the layer you saw in:
+    //
+    // /osm-wmts/default/20250317/2056/26/1541/885.png
+    //
+    // It stays underneath everything.
+    // ============================================================
+
+    const osmLayer = new ol.layer.Tile({
+
+        source: new ol.source.XYZ({
+
+            url:
+                'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+                '1.0.0/osm-wmts/default/20250317/2056/' +
+                '{z}/{y}/{x}.png?1786322938=',
+
+            projection: projection,
+
+            tileGrid: epflTileGrid,
+
+            wrapX: false
+        }),
+
+        opacity: 1
+    });
+
+
+    // ============================================================
+    // 5. OVERVIEW BUILDINGS
+    //
+    // EPFL uses floor 99 at zoom levels 20-24.
+    //
+    // Examples you gave:
+    //
+    // z20 → floor 99
+    // z21 → floor 99
+    // z22 → floor 99
+    // z23 → floor 99
+    // z24 → floor 99
+    // ============================================================
+
+    const overviewBuildingsLayer = new ol.layer.Tile({
+
+        source: new ol.source.XYZ({
+
+            url:
+                'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+                '1.0.0/batiments/default/20231011/99/2056/' +
+                '{z}/{y}/{x}.png?1786322938=',
+
+            projection: projection,
+
+            tileGrid: epflTileGrid,
+
+            wrapX: false
+        }),
+
+        opacity: 1,
+
+        // Only show overview building tiles from z20 to z24
+        minZoom: 20,
+        maxZoom: 24
+    });
+
+
+    // ============================================================
+    // 6. FLOOR-SPECIFIC BUILDINGS
+    //
+    // This layer starts at zoom 25.
+    //
+    // The URL is changed when the user selects a floor.
+    // ============================================================
+
+    let selectedFloor =
+        document.getElementById('floorSelect').value;
+
+    const floorBuildingsSource = new ol.source.XYZ({
+
+        url:
+            'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+            '1.0.0/batiments/default/20231011/' +
+            selectedFloor +
+            '/2056/{z}/{y}/{x}.png?1786322938=',
+
+        projection: projection,
+
+        tileGrid: epflTileGrid,
+
+        wrapX: false
+    });
+
+
+    const floorBuildingsLayer = new ol.layer.Tile({
+
+        source: floorBuildingsSource,
+
+        opacity: 1,
+
+        // Floor-specific tiles start at z25
+        minZoom: 25,
+
+        // EPFL currently goes to z29
+        maxZoom: 29
+    });
+
+
+    // ============================================================
+    // 7. BUILDING OUTLINES (WMS)
+    // ============================================================
+
+    const buildingsLayerWMS = new ol.layer.Tile({
+
+        source: new ol.source.TileWMS({
+
+            url: 'https://plan.epfl.ch/mapserv_proxy',
+
+            params: {
+                'ogcserver': 'MapServer',
+                'cache_version':
+                    '2d629817cd324addb5a003deaf5ee089',
+
+                'LAYERS': 'batiments',
+
+                'FORMAT': 'image/png',
+
+                'TRANSPARENT': 'true',
+
+                'VERSION': '1.3.0',
+
+                'floor': selectedFloor,
+
+                'lang': 'en',
+
+                'SERVERTYPE': 'mapserver'
+            },
+
+            projection: projection,
+
+            attributions: '© EPFL'
+        }),
+
+        opacity: 1
+    });
+
+
+    // ============================================================
+    // 8. LABELS (WMS)
+    // ============================================================
+
+    const labelsLayer = new ol.layer.Tile({
+
+        source: new ol.source.TileWMS({
+
+            url: 'https://plan.epfl.ch/mapserv_proxy',
+
+            params: {
+                'ogcserver': 'MapServer',
+
+                'cache_version':
+                    '2d629817cd324addb5a003deaf5ee089',
+
+                'LAYERS':
+                    'locaux_labels,batiments_routes_labels',
+
+                'FORMAT': 'image/png',
+
+                'TRANSPARENT': 'true',
+
+                'VERSION': '1.3.0',
+
+                'floor': selectedFloor,
+
+                'lang': 'en',
+
+                'SERVERTYPE': 'mapserver'
+            },
+
+            projection: projection,
+
+            attributions: '© EPFL'
+        }),
+
+        opacity: 1
+    });
+
+
+    // ============================================================
+    // 9. ELEMENT LAYERS
+    // ============================================================
+
+    const elementsSource = new ol.source.Vector();
+
+    const elementsLayer = new ol.layer.Vector({
+        source: elementsSource
+    });
+
+
+    const tempSource = new ol.source.Vector();
+
+    const tempLayer = new ol.layer.Vector({
+        source: tempSource
+    });
+
+
+    // ============================================================
+    // 10. CREATE MAP
+    // ============================================================
+
+    const map = new ol.Map({
+
+        target: 'map',
+
+        layers: [
+
+            // Background
+            osmLayer,
+
+            // EPFL building raster
+            overviewBuildingsLayer,
+            floorBuildingsLayer,
+
+            // WMS information
+            buildingsLayerWMS,
+            labelsLayer,
+
+            // Your elements
+            elementsLayer,
+            tempLayer
+        ],
+
+        view: new ol.View({
+
+            projection: projection,
+
+            center: epflCenter,
+
+            // Start at a useful EPFL zoom
+            zoom: 25,
+
+            maxZoom: 29,
+
+            minZoom: 16,
+
+            resolutions: epflResolutions
+        })
+    });
+
+
+    console.log('✨ EPFL map created!');
+
+
+    // ============================================================
+    // 11. LEGEND
+    // ============================================================
+
+    const legend = document.createElement('div');
+
+    legend.className = 'legend';
+
+    legend.innerHTML = `
+        <h4>Status Legend</h4>
+
+        <div class="legend-item">
+            <div class="legend-color"
+                 style="background: #27ae60;">
+            </div>
+            <span>Open</span>
+        </div>
+
+        <div class="legend-item">
+            <div class="legend-color"
+                 style="background: #e74c3c;">
+            </div>
+            <span>Sealed</span>
+        </div>
+
+        <div class="legend-item">
+            <div class="legend-color"
+                 style="background: #f39c12;">
+            </div>
+            <span>Maintenance</span>
+        </div>
+    `;
+
+    legend.style.position = 'absolute';
+    legend.style.bottom = '20px';
+    legend.style.right = '20px';
+    legend.style.zIndex = '1000';
+
+    document.getElementById('map').appendChild(legend);
+
+
+    // ============================================================
+    // 12. FLOOR CHANGING
+    // ============================================================
+
+    function changeFloor() {
+
+        selectedFloor =
+            document.getElementById('floorSelect').value;
+
+        console.log(
+            'Changing to floor:',
+            selectedFloor
+        );
+
+
+        // --------------------------------------------------------
+        // Update floor-specific raster layer
+        // --------------------------------------------------------
+
+        floorBuildingsSource.setUrl(
+
+            'https://prod-plan-epfl-tiles{0-4}.epfl.ch/' +
+            '1.0.0/batiments/default/20231011/' +
+            selectedFloor +
+            '/2056/{z}/{y}/{x}.png?1786322938='
+        );
+
+        floorBuildingsSource.refresh();
+
+
+        // --------------------------------------------------------
+        // Update WMS building outlines
+        // --------------------------------------------------------
+
+        buildingsLayerWMS
+            .getSource()
+            .updateParams({
+                'floor': selectedFloor
+            });
+
+
+        // --------------------------------------------------------
+        // Update labels
+        // --------------------------------------------------------
+
+        labelsLayer
+            .getSource()
+            .updateParams({
+                'floor': selectedFloor
+            });
+
+
+        // --------------------------------------------------------
+        // Remove temporary placement marker
+        // --------------------------------------------------------
+
+        tempSource.clear();
+
+
+        // --------------------------------------------------------
+        // Update element visibility
+        // --------------------------------------------------------
+
+        updateElementVisibility();
+
+
+        console.log(
+            'Floor changed to:',
+            selectedFloor
+        );
+    }
+
+
+    // ============================================================
+    // 13. CUSTOM ELEMENT ICONS
+    // ============================================================
+
+    const icons = {
+
+        door: {
+            color: '#8e44ad',
+            symbol: '🚪'
+        },
+
+        gate: {
+            color: '#e74c3c',
+            symbol: '⛩️'
+        },
+
+        room: {
+            color: '#3498db',
+            symbol: '🏠'
+        },
+        
+        trapdoor: {
+            color: '#e74c3c',
+            symbol: '🪜'
+        },
+        
+        trapdoorTop: {
+            color: '#f39c12',
+            symbol: '🕳️'
+        },
+
+        elevator: {
+            color: '#f39c12',
+            symbol: '🛗'
+        },
+
+        other: {
+            color: '#95a5a6',
+            symbol: '📍'
+        }
+    };
+
+
+    const statusColors = {
+
+        sealed: '#e74c3c',
+
+        open: '#27ae60',
+
+        maintenance: '#f39c12', 
+        
+        unknown: '#d3d3d3',
+    };
+
+
+    // ============================================================
+    // 14. STATE
+    // ============================================================
+
+    let elements =
+        JSON.parse(
+            localStorage.getItem('epflElements')
+        ) || [];
+
+    let placementMode = false;
+
+    let markers = {};
+
+
+    // ============================================================
+    // 15. ELEMENT STYLE
+    // ============================================================
+
+    function createElementStyle(type, status) {
+
+        const iconInfo =
+            icons[type] || icons.other;
+
+        const color =
+            statusColors[status] || '#95a5a6';
+
+
+        return new ol.style.Style({
+
+            image: new ol.style.Circle({
+
+                radius: 12,
+
+                fill: new ol.style.Fill({
+                    color: color
+                }),
+
+                stroke: new ol.style.Stroke({
+                    color: 'white',
+                    width: 3
+                })
+            }),
+
+            text: new ol.style.Text({
+
+                text: iconInfo.symbol,
+
+                font: '16px Segoe UI Emoji',
+
+                offsetY: 0,
+
+                fill: new ol.style.Fill({
+                    color: 'white'
+                })
+            })
+        });
+    }
+
+
+    // ============================================================
+    // 16. ADD ELEMENT MARKER
+    // ============================================================
+
+    function addMarker(element) {
+
+        /*
+         * Element coordinates are stored as:
+         *
+         * lat = latitude
+         * lng = longitude
+         *
+         * OpenLayers uses EPSG:2056.
+         *
+         * Therefore we convert:
+         *
+         * EPSG:4326 → EPSG:2056
+         */
+
+        const coordinate = ol.proj.transform(
+
+            [element.lng, element.lat],
+
+            'EPSG:4326',
+
+            'EPSG:2056'
+        );
+
+
+        const feature = new ol.Feature({
+
+            geometry:
+                new ol.geom.Point(coordinate),
+
+            elementId:
+                element.id,
+
+            floor:
+                element.floor
+        });
+
+
+        feature.setStyle(
+
+            createElementStyle(
+                element.type,
+                element.status
+            )
+        );
+
+
+        elementsSource.addFeature(feature);
+
+        markers[element.id] = feature;
+
+
+        // Apply current floor visibility
+        updateFeatureVisibility(
+            element,
+            feature
+        );
+    }
+
+
+    // ============================================================
+    // 17. ELEMENT FLOOR VISIBILITY
+    // ============================================================
+
+    function updateFeatureVisibility(
+        element,
+        feature
+    ) {
+
+        /*
+         * Old elements may not have a floor.
+         *
+         * For backwards compatibility, treat them as
+         * belonging to floor 0.
+         */
+
+        const elementFloor =
+            element.floor !== undefined
+                ? String(element.floor)
+                : '0';
+
+
+        const currentFloor =
+            String(selectedFloor);
+
+
+        if (elementFloor === currentFloor) {
+
+            feature.setStyle(
+                createElementStyle(
+                    element.type,
+                    element.status
+                )
+            );
+        
+
+        } else { if (elementFloor === currentFloor-1){
+            console.log("got it!")
+            if(element.type === 'trapdoor'){
+                feature.setStyle(
+                    createElementStyle(
+                        'trapdoorTop',
+                        element.status
+                    )
+                )
+            }
+            else {
+
+                // Hide it
+                feature.setStyle(null);
+            }
+            }
+        else {
+
+            // Hide it
+            feature.setStyle(null);
+        }
+    }
+}
+
+
+    function updateElementVisibility() {
+
+        elements.forEach(element => {
+
+            const feature =
+                markers[element.id];
+
+            if (feature) {
+
+                updateFeatureVisibility(
+                    element,
+                    feature
+                );
+            }
+        });
+    }
+
+
+    // ============================================================
+    // 18. LOAD SAVED ELEMENTS
+    // ============================================================
+
+    function loadElements() {
+
+        elements.forEach(element => {
+
+            /*
+             * Older saved elements might not have a floor.
+             *
+             * We assign them to floor 0.
+             */
+
+            if (element.floor === undefined) {
+                element.floor = '0';
+            }
+
+            addMarker(element);
+        });
+
+
+        updateElementsList();
+    }
+
+
+    // ============================================================
+    // 19. START PLACEMENT MODE
+    // ============================================================
+
+    function startPlacement() {
+
+        placementMode = true;
+
+        document
+            .getElementById('clickHint')
+            .classList
+            .add('active');
+
+        document
+            .getElementById('map')
+            .style.cursor = 'crosshair';
+    }
+
+
+    // ============================================================
+    // 20. MAP CLICK
+    // ============================================================
+
+    map.on('click', function(e) {
+
+        if (!placementMode) {
+            return;
+        }
+
+
+        // Convert EPSG:2056 → WGS84
+
+        const [lng, lat] =
+            ol.proj.transform(
+
+                e.coordinate,
+
+                'EPSG:2056',
+
+                'EPSG:4326'
+            );
+
+
+        document
+            .getElementById('elementCoords')
+            .value =
+                `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+
+        // Remove old temporary marker
+
+        tempSource.clear();
+
+
+        // Create new temporary marker
+
+        const tempFeature =
+            new ol.Feature({
+
+                geometry:
+                    new ol.geom.Point(
+                        e.coordinate
+                    )
+            });
+
+
+        tempFeature.setStyle(
+
+            new ol.style.Style({
+
+                image:
+                    new ol.style.Circle({
+
+                        radius: 9,
+
+                        fill:
+                            new ol.style.Fill({
+                                color: '#e94560'
+                            }),
+
+                        stroke:
+                            new ol.style.Stroke({
+                                color: 'white',
+                                width: 3
+                            })
+                    })
+            })
+        );
+
+
+        tempSource.addFeature(
+            tempFeature
+        );
+
+
+        placementMode = false;
+
+
+        document
+            .getElementById('clickHint')
+            .classList
+            .remove('active');
+
+
+        document
+            .getElementById('map')
+            .style.cursor = '';
+    });
+
+
+    // ============================================================
+    // 21. ADD ELEMENT
+    // ============================================================
+
+    function addElement() {
+
+        const name =
+            document
+                .getElementById('elementName')
+                .value;
+
+        const type =
+            document
+                .getElementById('elementType')
+                .value;
+
+        const status =
+            document
+                .getElementById('elementStatus')
+                .value;
+
+        const description =
+            document
+                .getElementById('elementDesc')
+                .value;
+
+        const coordsInput =
+            document
+                .getElementById('elementCoords')
+                .value;
+
+
+        if (!name) {
+
+            alert(
+                'Please enter a name!'
+            );
+
+            return;
+        }
+
+
+        let lat;
+        let lng;
+
+
+        if (coordsInput) {
+
+            [lat, lng] =
+                coordsInput
+                    .split(',')
+                    .map(
+                        c =>
+                            parseFloat(
+                                c.trim()
+                            )
+                    );
+
+        } else {
+
+            alert(
+                'Please place the element on the map!'
+            );
+
+            return;
+        }
+
+
+        // IMPORTANT:
+        // Save the floor with the element.
+
+        const element = {
+
+            id: Date.now(),
+
+            name,
+
+            type,
+
+            status,
+
+            description,
+
+            lat,
+
+            lng,
+
+            floor: selectedFloor,
+
+            created:
+                new Date().toISOString()
+        };
+        
+        elements.push(element);
+        
+        if (type==='trapdoor') {
+            const complement = {
+                id: element.id*2,
+                parentId: element.id,
+                name: name + ' top',
+                type: 'trapdoorTop',
+                status,
+                description, 
+                lat,
+                lng, 
+                floor: Number(selectedFloor)+1,
+                created:
+                    new Date().toISOString()
+            };
+            elements.push(complement)
+            addMarker(complement);
+        }
+
+
+
+        saveElements();
+
+
+        addMarker(element);
+        
+
+
+        updateElementsList();
+
+
+        // Reset form
+
+        document
+            .getElementById('elementName')
+            .value = '';
+
+        document
+            .getElementById('elementDesc')
+            .value = '';
+
+        document
+            .getElementById('elementCoords')
+            .value = '';
+
+
+        tempSource.clear();
+
+
+        console.log(
+            'Added element on floor:',
+            selectedFloor
+        );
+    }
+
+
+    // ============================================================
+    // 22. SIDEBAR ELEMENT LIST
+    // ============================================================
+
+    function updateElementsList() {
+
+        const container =
+            document.getElementById(
+                'elementsList'
+            );
+
+
+        document
+            .getElementById('count')
+            .textContent =
+                elements.length;
+
+
+        if (elements.length === 0) {
+
+            container.innerHTML =
+                '<p style="color: #666; text-align: center; padding: 20px;">' +
+                'No elements yet. Add one above!' +
+                '</p>';
+
+            return;
+        }
+
+
+        container.innerHTML =
+            elements.map(el => `
+
+                <div class="element-card ${el.status}">
+
+                    <h4>
+                        ${icons[el.type]?.symbol || '📍'}
+                        ${el.name}
+                    </h4>
+
+                    <span class="status ${el.status}">
+                        ${el.status.toUpperCase()}
+                    </span>
+
+                    <div class="coords">
+                        📍
+                        ${el.lat.toFixed(5)},
+                        ${el.lng.toFixed(5)}
+                        <br>
+                        🏬 Floor:
+                        ${el.floor ?? '0'}
+                    </div>
+
+                    ${
+                        el.description
+                        ?
+                        `<div style="
+                            font-size: 0.8rem;
+                            color: #aaa;
+                            margin-bottom: 8px;
+                        ">
+                            ${el.description}
+                        </div>`
+                        :
+                        ''
+                    }
+
+                    <div class="actions">
+
+                        <button
+                            onclick="changeStatus(${el.id}, 'open')"
+                            style="background: #27ae60;">
+                            Open
+                        </button>
+
+                        <button
+                            onclick="changeStatus(${el.id}, 'sealed')"
+                            style="background: #e74c3c;">
+                            Seal
+                        </button>
+
+                        <button
+                            onclick="changeStatus(${el.id}, 'maintenance')"
+                            style="background: #f39c12;">
+                            Maint.
+                        </button>
+                        
+                        <button
+                            onclick="changeStatus(${el.id}, 'unknown')"
+                            style="background: #d3d3d3;">
+                            🤷🏻‍♀️
+                        </button>
+
+                        <button
+                            class="delete-btn"
+                            onclick="deleteElement(${el.id})">
+                            🗑️
+                        </button>
+
+                    </div>
+
+                </div>
+
+            `).join('');
+    }
+
+
+    // ============================================================
+    // 23. CHANGE STATUS
+    // ============================================================
+
+    function changeStatus(
+        id,
+        newStatus
+    ) {
+
+        const element =
+            elements.find(
+                e => e.id === id
+            );
+
+
+        if (!element) {
+            return;
+        }
+
+
+        element.status =
+            newStatus;
+
+
+        saveElements();
+
+
+        const feature =
+            markers[id];
+
+
+        if (feature) {
+
+            updateFeatureVisibility(
+                element,
+                feature
+            );
+        }
+
+
+        updateElementsList();
+    }
+
+
+    // ============================================================
+    // 24. DELETE ELEMENT
+    // ============================================================
+
+    function deleteElement(id) {
+
+        const element = elements.find(e => e.id === id);
+
+        if (!element) return;
+        
+        if (!confirm(`Delete this ${element.type}? This cannot be undone!`))     {
+            return;
+        }
+
+
+        let idsToDelete = [id];
+
+        // If deleting the bottom of a trapdoor,
+        // find its corresponding top
+        if (element.type === 'trapdoor') {
+
+            const top = elements.find(e =>
+                e.type === 'trapdoorTop' &&
+                (
+                    e.parentId === element.id ||
+                    e.id === element.id + 1
+                )
+            );
+
+            if (top) {
+                idsToDelete.push(top.id);
+            }
+        }
+
+        // If deleting the top,
+        // find its corresponding bottom
+        if (element.type === 'trapdoorTop') {
+
+            let bottom = elements.find(e =>
+                e.type === 'trapdoor' &&
+                e.id === element.parentId
+            );
+
+            // Fallback for trapdoors created with the id + 1 system
+            if (!bottom) {
+                bottom = elements.find(e =>
+                    e.type === 'trapdoor' &&
+                    e.id === element.id - 1
+                );
+            }
+
+            if (bottom) {
+                idsToDelete.push(bottom.id);
+            }
+        }
+
+        // Remove both elements from the map
+        idsToDelete.forEach(elementId => {
+
+            const feature = markers[elementId];
+
+            if (feature) {
+                elementsSource.removeFeature(feature);
+                delete markers[elementId];
+            }
+        });
+
+        // Remove both elements from the saved data
+        elements = elements.filter(
+            e => !idsToDelete.includes(e.id)
+        );
+
+        saveElements();
+        updateElementsList();
+    }
+
+
+
+    // ============================================================
+    // 25. CLEAR EVERYTHING
+    // ============================================================
+
+    function clearAll() {
+
+        if (
+            !confirm(
+                'Delete all elements? This cannot be undone!'
+            )
+        ) {
+            return;
+        }
+
+
+        elements = [];
+
+        markers = {};
+
+
+        elementsSource.clear();
+
+        tempSource.clear();
+
+
+        saveElements();
+
+
+        updateElementsList();
+    }
+
+
+    // ============================================================
+    // 26. SAVE
+    // ============================================================
+
+    function saveElements() {
+
+        localStorage.setItem(
+            'epflElements',
+            JSON.stringify(elements)
+        );
+    }
+
+
+    // ============================================================
+    // 27. EXPORT
+    // ============================================================
+
+    function exportData() {
+
+        const dataStr =
+            JSON.stringify(
+                elements,
+                null,
+                2
+            );
+
+
+        const blob =
+            new Blob(
+                [dataStr],
+                {
+                    type:
+                        'application/json'
+                }
+            );
+
+
+        const url =
+            URL.createObjectURL(
+                blob
+            );
+
+
+        const a =
+            document.createElement('a');
+
+
+        a.href = url;
+
+
+        a.download =
+            `epfl-map-elements-${new Date()
+                .toISOString()
+                .split('T')[0]
+            }.json`;
+
+
+        a.click();
+
+
+        URL.revokeObjectURL(url);
+    }
+
+
+    // ============================================================
+    // 28. INITIALIZE
+    // ============================================================
+
+    loadElements();
+
+
+    console.log(
+        '💖 EPFL Interactive Map fully initialized!'
+    );
+
+    console.log(
+        'Current floor:',
+        selectedFloor
+    );
+</script>
+
+
+
+</body>
+</html>
